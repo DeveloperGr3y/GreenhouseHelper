@@ -85,9 +85,20 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
         }
         for (name in SavedLayouts.names()) {
             val layout = SavedLayouts.load(name) ?: continue
-            list += Entry(name, if (layout.source.contains("skylayouts.io")) "from skylayouts.io" else "saved", layout, null, name)
+            list += Entry(name, describe(layout), layout, null, name)
         }
         entries = list
+    }
+
+    /** "All In Aloe · loaded from skylayouts.io": what it's for, and where it first came from. */
+    private fun describe(layout: Layout): String {
+        val origin = when {
+            layout.source.contains("skylayouts.io") -> "loaded from skylayouts.io"
+            layout.source.startsWith("captured") -> layout.source
+            else -> "your own"
+        }
+        val target = layout.spots.firstOrNull()?.label
+        return if (target != null) "$target · $origin" else origin
     }
 
     private fun rows(): List<Row> {
