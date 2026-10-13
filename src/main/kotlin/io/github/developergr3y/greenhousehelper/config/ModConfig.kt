@@ -2,16 +2,18 @@ package io.github.developergr3y.greenhousehelper.config
 
 import com.google.gson.annotations.Expose
 import io.github.developergr3y.greenhousehelper.GreenhouseHelper
+import io.github.developergr3y.greenhousehelper.hud.HudPosition
 import io.github.notenoughupdates.moulconfig.Config
 import io.github.notenoughupdates.moulconfig.annotations.Category
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean
+import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorButton
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorDropdown
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorInfoText
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorSlider
 import io.github.notenoughupdates.moulconfig.annotations.ConfigOption
 import io.github.notenoughupdates.moulconfig.common.text.StructuredText
 
-/** Everything shown in /greenhouse. */
+/** Everything shown in /greenhouse. @Category = a tab on the left, @ConfigOption = one setting. */
 class ModConfig : Config() {
     override fun getTitle(): StructuredText = StructuredText.of("GreenhouseHelper ${GreenhouseHelper.version} §7by §bGr3y_VVolf")
 
@@ -19,8 +21,23 @@ class ModConfig : Config() {
 
     @Expose
     @JvmField
-    @Category(name = "General", desc = "The layout overlay on your greenhouse.")
+    @Category(name = "General", desc = "Getting started, and update notices.")
     var general = GeneralConfig()
+
+    @Expose
+    @JvmField
+    @Category(name = "Overlay", desc = "The layout drawn on your greenhouse: the floor, then the crops.")
+    var overlay = OverlayConfig()
+
+    @Expose
+    @JvmField
+    @Category(name = "Plant Codes", desc = "Short codes (e.g. MJLB) floating above each plant.")
+    var labels = LabelsConfig()
+
+    @Expose
+    @JvmField
+    @Category(name = "Shopping List", desc = "A panel with what the layout needs.")
+    var shopping = ShoppingConfig()
 }
 
 enum class Layer(private val label: String) {
@@ -38,11 +55,20 @@ class GeneralConfig {
     @ConfigOption(
         name = "Getting started",
         desc = "In a greenhouse, run §e/greenhouse setup§7 and pick the grid's top-left and bottom-right ground blocks. " +
-            "Then §e/greenhouse load <skylayouts.io link>§7, or §e/greenhouse use <name>§7 for one you've saved.",
+            "Then §e/greenhouse load <skylayouts.io link>§7, or §e/greenhouse use <name>§7 for one you've saved. " +
+            "§e/greenhouse help§7 lists every command.",
     )
     @ConfigEditorInfoText(infoTitle = "Info")
     var info = false
 
+    @Expose
+    @JvmField
+    @ConfigOption(name = "Update Notice", desc = "Say in chat when a newer version is out on GitHub (checked once per game).")
+    @ConfigEditorBoolean
+    var updateNotice = true
+}
+
+class OverlayConfig {
     @Expose
     @JvmField
     @ConfigOption(name = "Enabled", desc = "Show the layout in your greenhouse.")
@@ -66,22 +92,40 @@ class GeneralConfig {
     @ConfigOption(name = "Crop Opacity", desc = "How strong the crop boxes are, in percent.")
     @ConfigEditorSlider(minValue = 10f, maxValue = 90f, minStep = 5f)
     var cropOpacity = 30f
+}
 
+class LabelsConfig {
     @Expose
     @JvmField
-    @ConfigOption(name = "Plant Codes", desc = "Show each plant's short code (e.g. MJLB) above it.")
+    @ConfigOption(name = "Show Codes", desc = "Show each plant's short code (e.g. MJLB) above it.")
     @ConfigEditorBoolean
-    var labels = true
+    var enabled = true
 
     @Expose
     @JvmField
-    @ConfigOption(name = "Code Distance", desc = "Only show codes within this many blocks.")
+    @ConfigOption(name = "Distance", desc = "Only show codes within this many blocks.")
     @ConfigEditorSlider(minValue = 4f, maxValue = 24f, minStep = 1f)
-    var labelDistance = 12f
+    var distance = 12f
+}
+
+class ShoppingConfig {
+    @Expose
+    @JvmField
+    @ConfigOption(name = "Show Panel", desc = "While you're in a greenhouse with a layout: every plant it needs, and how many.")
+    @ConfigEditorBoolean
+    var enabled = true
 
     @Expose
     @JvmField
-    @ConfigOption(name = "Update Notice", desc = "Say in chat when a newer version is out on GitHub (checked once per game).")
+    @ConfigOption(name = "Panel Background", desc = "Draw a dark background behind the panel.")
     @ConfigEditorBoolean
-    var updateNotice = true
+    var background = true
+
+    @Transient
+    @JvmField
+    @ConfigOption(name = "Move Panel", desc = "Drag it to move it, scroll to resize. Also: §e/greenhouse gui")
+    @ConfigEditorButton(buttonText = "Edit")
+    val edit = Runnable { GreenhouseHelper.openPanelEditor() }
+
+    @Expose @JvmField var position = HudPosition(x = 5, y = 80)
 }

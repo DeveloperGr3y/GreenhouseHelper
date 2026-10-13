@@ -30,16 +30,17 @@ object LayoutRender {
     private const val LIFT = 0.01
     private const val CROP_HEIGHT = 0.9
 
-    private val config get() = GreenhouseHelper.config.general
+    private val overlay get() = GreenhouseHelper.config.overlay
+    private val labels get() = GreenhouseHelper.config.labels
 
     fun renderWorld(poseStack: PoseStack, collector: SubmitNodeCollector) {
-        if (!config.enabled) return
+        if (!overlay.enabled) return
         val greenhouse = Greenhouses.current() ?: return
         val layout = greenhouse.layout ?: return
         val camera = Compat.camera.position()
-        val floorAlpha = alpha(config.floorOpacity)
-        val cropAlpha = alpha(config.cropOpacity)
-        val layer = config.layer
+        val floorAlpha = alpha(overlay.floorOpacity)
+        val cropAlpha = alpha(overlay.cropOpacity)
+        val layer = overlay.layer
 
         collector.submitCustomGeometry(poseStack, RenderTypes.debugQuads()) { pose, buffer ->
             fun quad(a: Vec3, b: Vec3, c: Vec3, d: Vec3, argb: Int) {
@@ -103,7 +104,7 @@ object LayoutRender {
 
     /** Plant codes above the crop boxes, nearest few metres only. */
     fun renderLabels(graphics: GuiGraphicsExtractor, @Suppress("UNUSED_PARAMETER") deltaTracker: DeltaTracker) {
-        if (!config.enabled || !config.labels || config.layer == Layer.FLOOR || Compat.screen != null) return
+        if (!overlay.enabled || !labels.enabled || overlay.layer == Layer.FLOOR || Compat.screen != null) return
         val greenhouse = Greenhouses.current() ?: return
         val layout = greenhouse.layout ?: return
         val mc = Minecraft.getInstance()
@@ -112,7 +113,7 @@ object LayoutRender {
         for (plant in layout.plants) {
             val box = box(greenhouse, layout, plant.x, plant.y, plant.width, plant.height)
             val at = Vec3((box.minX + box.maxX) / 2, box.maxY + 0.35, (box.minZ + box.maxZ) / 2)
-            if (at.distanceTo(eye) > config.labelDistance) continue
+            if (at.distanceTo(eye) > labels.distance) continue
             val (x, y) = Projection.toScreen(at) ?: continue
             val w = font.width(plant.abbr)
             graphics.text(font, plant.abbr, x - w / 2, y - 4, (0xFF shl 24) or plant.colour, true)

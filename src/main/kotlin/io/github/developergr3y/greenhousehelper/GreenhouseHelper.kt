@@ -4,8 +4,11 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import io.github.developergr3y.greenhousehelper.config.Layer
 import io.github.developergr3y.greenhousehelper.config.ModConfig
+import io.github.developergr3y.greenhousehelper.greenhouse.Dump
 import io.github.developergr3y.greenhousehelper.greenhouse.Greenhouse
 import io.github.developergr3y.greenhousehelper.greenhouse.Greenhouses
+import io.github.developergr3y.greenhousehelper.hud.HudEditScreen
+import io.github.developergr3y.greenhousehelper.hud.Panels
 import io.github.developergr3y.greenhousehelper.layout.SavedLayouts
 import io.github.developergr3y.greenhousehelper.layout.SkyLayouts
 import io.github.developergr3y.greenhousehelper.render.LayoutRender
@@ -74,6 +77,8 @@ object GreenhouseHelper : ClientModInitializer {
 
         LevelRenderEvents.COLLECT_SUBMITS.register { ctx -> LayoutRender.renderWorld(ctx.poseStack(), ctx.submitNodeCollector()) }
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT, Identifier.fromNamespaceAndPath(MOD_ID, "labels"), LayoutRender::renderLabels)
+        HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT, Identifier.fromNamespaceAndPath(MOD_ID, "panels"), Panels::render)
+        Panels.register()
 
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(command("greenhouse"))
@@ -86,23 +91,26 @@ object GreenhouseHelper : ClientModInitializer {
             nextTick = { managedConfig.openConfigGui() }
             1
         }
+        .then(ClientCommands.literal("help").executes { help(); 1 })
+        .then(ClientCommands.literal("gui").executes { openPanelEditor(); 1 })
+        .then(ClientCommands.literal("dump").executes { dump(); 1 })
         .then(ClientCommands.literal("setup").executes { Greenhouses.startSetup(); 1 })
         .then(ClientCommands.literal("corner").executes { Greenhouses.pickCorner(lookedAtGround()); 1 })
         .then(ClientCommands.literal("cancel").executes { Greenhouses.cancelSetup(); chat("Setup cancelled."); 1 })
         .then(ClientCommands.literal("list").executes { list(); 1 })
         .then(ClientCommands.literal("remove").executes {
-            inGreenhouse()?.let { Greenhouses.remove(it); chat("Forgot this greenhouse.") }
+            inGreenhouse()?.let { Greenhouses.remove(it); chat("Forgot the ${it.label()}.") }
             1
         })
-        .then(ClientCommands.literal("load").then(ClientCommands.argument("link", StringArgumentType.greedyString()).executes { ctx ->
+        .then(ClientCommands.literal("load").executes { usage("load <skylayouts.io link>", "loads a layout onto the greenhouse you're in"); 1 }.then(ClientCommands.argument("link", StringArgumentType.greedyString()).executes { ctx ->
             load(StringArgumentType.getString(ctx, "link"))
             1
         }))
-        .then(ClientCommands.literal("save").then(ClientCommands.argument("name", StringArgumentType.greedyString()).executes { ctx ->
+        .then(ClientCommands.literal("save").executes { usage("save <name>", "saves this greenhouse's layout under a name"); 1 }.then(ClientCommands.argument("name", StringArgumentType.greedyString()).executes { ctx ->
             save(StringArgumentType.getString(ctx, "name").trim())
             1
         }))
-        .then(ClientCommands.literal("use").then(ClientCommands.argument("name", StringArgumentType.greedyString())
+        .then(ClientCommands.literal("use").executes { usage("use <name>", "puts a saved layout on the greenhouse you're in"); 1 }.then(ClientCommands.argument("name", StringArgumentType.greedyString())
             .suggests { _, builder -> SavedLayouts.names().forEach(builder::suggest); builder.buildFuture() }
             .executes { ctx ->
                 use(StringArgumentType.getString(ctx, "name").trim())
@@ -113,7 +121,7 @@ object GreenhouseHelper : ClientModInitializer {
             chat(if (names.isEmpty()) "No saved layouts yet. §e/greenhouse save <name>§r saves the one you're using." else "Saved layouts: §f${names.joinToString("§7, §f")}")
             1
         })
-        .then(ClientCommands.literal("delete").then(ClientCommands.argument("name", StringArgumentType.greedyString())
+        .then(ClientCommands.literal("delete").executes { usage("delete <name>", "deletes a saved layout. To take the layout off this greenhouse, use §e/greenhouse clear§r"); 1 }.then(ClientCommands.argument("name", StringArgumentType.greedyString())
             .suggests { _, builder -> SavedLayouts.names().forEach(builder::suggest); builder.buildFuture() }
             .executes { ctx ->
                 val name = StringArgumentType.getString(ctx, "name").trim()
@@ -121,7 +129,7 @@ object GreenhouseHelper : ClientModInitializer {
                 1
             }))
         .then(ClientCommands.literal("clear").executes {
-            inGreenhouse()?.let { it.layout = null; Greenhouses.save(); chat("Cleared this greenhouse's layout.") }
+            inGreenhouse()?.let { it.layout = null; Greenhouses.save(); chat("Cleared the ${it.label()}'s layout.") }
             1
         })
         .then(ClientCommands.literal("rotate").executes {
@@ -132,14 +140,14 @@ object GreenhouseHelper : ClientModInitializer {
             }
             1
         })
-        .then(ClientCommands.literal("layer").then(ClientCommands.argument("layer", StringArgumentType.word())
+        .then(ClientCommands.literal("layer").executes { usage("layer <floor|crops|both>", "which layers to show"); 1 }.then(ClientCommands.argument("layer", StringArgumentType.word())
             .suggests { _, builder -> Layer.entries.forEach { builder.suggest(it.name.lowercase()) }; builder.buildFuture() }
             .executes { ctx ->
                 val layer = Layer.entries.firstOrNull { it.name.equals(StringArgumentType.getString(ctx, "layer"), true) }
                 if (layer == null) {
                     chat("§cUse floor, crops or both.")
                 } else {
-                    config.general.layer = layer
+                    config.overlay.layer = layer
                     saveConfig()
                     chat("Showing: §f$layer")
                 }
@@ -219,10 +227,45 @@ object GreenhouseHelper : ClientModInitializer {
             return
         }
         chat("Your greenhouses:")
-        for (g in all) {
-            val where = g.plot.ifEmpty { "${g.minX}, ${g.y}, ${g.minZ}" }
-            chat(" §f$where§7: ${g.layout?.name ?: "no layout"}")
-        }
+        for (g in all) chat(" §f${g.label()}§7: ${g.layout?.name ?: "no layout"}")
+    }
+
+    private fun usage(command: String, what: String) = chat("§e/greenhouse $command§r $what.")
+
+    private fun help() {
+        chat("Commands (also §e/gh§r):")
+        for ((command, what) in listOf(
+            "" to "settings",
+            "setup" to "set up the greenhouse you're in (pick its corners)",
+            "load <skylayouts.io link>" to "load a layout onto it",
+            "use <name>" to "put a saved layout on it",
+            "save <name>" to "save its layout under a name",
+            "layouts" to "list your saved layouts",
+            "delete <name>" to "delete a saved layout",
+            "clear" to "take the layout off this greenhouse",
+            "layer <floor|crops|both>" to "which layers to show",
+            "rotate" to "turn the layout a quarter turn",
+            "list" to "your greenhouses and their layouts",
+            "remove" to "forget the greenhouse you're in",
+            "gui" to "move the shopping list",
+            "dump" to "write what's in each cell to a file (to teach the mod your plants)",
+        )) chat(" §e/greenhouse $command§7 - $what")
+    }
+
+    private fun dump() {
+        val greenhouse = inGreenhouse() ?: return
+        runCatching { Dump.write(greenhouse) }
+            .onSuccess { chat("Wrote §f${it.name}§r to §fconfig/greenhousehelper/dumps/§r.") }
+            .onFailure { chat("§cCouldn't write the dump: ${it.message}"); logger.warn("Dump failed", it) }
+    }
+
+    fun openPanelEditor() {
+        nextTick = { Compat.setScreen(HudEditScreen()) }
+    }
+
+    fun resetPanels() {
+        for (panel in Panels.all) panel.position = panel.defaultPosition()
+        saveConfig()
     }
 
     /** "[Set corner]": runs /greenhouse corner, which this mod handles itself (it never reaches Hypixel). */

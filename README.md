@@ -2,7 +2,7 @@
 
 Greenhouse layouts for Hypixel SkyBlock, drawn on your plot like a schematic: first the **floor** (which cells need
 watered ground), then the **crops** (what to plant where, at full size), with each plant's short code floating above
-it.
+it. A shopping list panel shows what the layout needs.
 
 Fabric, Minecraft 26.1 and 26.2.
 
@@ -29,6 +29,9 @@ Set up as many greenhouses as you like; each remembers its own layout, per SkyBl
 | `/greenhouse layer <floor\|crops\|both>` | Which layers to show |
 | `/greenhouse rotate` | Turn the layout a quarter turn |
 | `/greenhouse clear` · `remove` · `list` | Clear the layout, forget the greenhouse, list them |
+| `/greenhouse gui` | Move the shopping list panel |
+| `/greenhouse dump` | Write what's in each cell to a file (to teach the mod what your plants look like) |
+| `/greenhouse help` | Every command |
 
 ## What it does and doesn't do
 
