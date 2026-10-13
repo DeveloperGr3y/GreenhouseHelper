@@ -31,6 +31,11 @@ class ModConfig : Config() {
 
     @Expose
     @JvmField
+    @Category(name = "Progress", desc = "What's planted already, what's wrong, and how the mutations are doing.")
+    var progress = ProgressConfig()
+
+    @Expose
+    @JvmField
     @Category(name = "Plant Codes", desc = "Short codes (e.g. MJLB) floating above each plant.")
     var labels = LabelsConfig()
 
@@ -77,7 +82,7 @@ class OverlayConfig {
 
     @Expose
     @JvmField
-    @ConfigOption(name = "Layer", desc = "The floor (watered or not), the crops, or both. Also: §e/greenhouse layer§7.")
+    @ConfigOption(name = "Layer", desc = "The floor (the ground block each cell needs), the crops, or both. Also: §e/greenhouse layer§7.")
     @ConfigEditorDropdown
     var layer = Layer.BOTH
 
@@ -92,6 +97,38 @@ class OverlayConfig {
     @ConfigOption(name = "Crop Opacity", desc = "How strong the crop boxes are, in percent.")
     @ConfigEditorSlider(minValue = 10f, maxValue = 90f, minStep = 5f)
     var cropOpacity = 30f
+}
+
+class ProgressConfig {
+    @Expose
+    @JvmField
+    @ConfigOption(name = "Only Show What's Left", desc = "Hide plants that are already in the right place, ground that's already right, and mutations that have grown.")
+    @ConfigEditorBoolean
+    var hideDone = true
+
+    @Expose
+    @JvmField
+    @ConfigOption(name = "Mark Mistakes", desc = "Show the wrong plant in a cell in red, and outline ground that's the wrong block.")
+    @ConfigEditorBoolean
+    var markWrong = true
+
+    @Expose
+    @JvmField
+    @ConfigOption(name = "Highlight What You're Holding", desc = "Holding a plant's seeds brightens the cells it still needs to go in and fades the rest.")
+    @ConfigEditorBoolean
+    var highlightHeld = true
+
+    @Expose
+    @JvmField
+    @ConfigOption(name = "Ring Status", desc = "A green post on mutation spots whose whole ring is planted, and how much of each ring is done above the spot.")
+    @ConfigEditorBoolean
+    var ringStatus = true
+
+    @Expose
+    @JvmField
+    @ConfigOption(name = "Growth", desc = "Show a grown mutation's stage above it, and a gold post when it's ready to harvest.")
+    @ConfigEditorBoolean
+    var growth = true
 }
 
 class LabelsConfig {
@@ -114,6 +151,18 @@ class ShoppingConfig {
     @ConfigOption(name = "Show Panel", desc = "While you're in a greenhouse with a layout: every plant it needs, and how many.")
     @ConfigEditorBoolean
     var enabled = true
+
+    @Expose
+    @JvmField
+    @ConfigOption(name = "Count Down", desc = "Show how many of each plant are still missing, rather than the layout's totals. Green when they're all in.")
+    @ConfigEditorBoolean
+    var countDown = true
+
+    @Expose
+    @JvmField
+    @ConfigOption(name = "Progress Lines", desc = "Lines under the list: plants in place, rings complete, mutations grown or ready, and mistakes.")
+    @ConfigEditorBoolean
+    var progress = true
 
     @Expose
     @JvmField

@@ -4,11 +4,16 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import io.github.developergr3y.greenhousehelper.config.Layer
 import io.github.developergr3y.greenhousehelper.config.ModConfig
+import io.github.developergr3y.greenhousehelper.greenhouse.Capture
 import io.github.developergr3y.greenhousehelper.greenhouse.Dump
 import io.github.developergr3y.greenhousehelper.greenhouse.Greenhouse
 import io.github.developergr3y.greenhousehelper.greenhouse.Greenhouses
+import io.github.developergr3y.greenhousehelper.greenhouse.Scanner
 import io.github.developergr3y.greenhousehelper.hud.HudEditScreen
+import io.github.developergr3y.greenhousehelper.hud.LayoutsScreen
 import io.github.developergr3y.greenhousehelper.hud.Panels
+import io.github.developergr3y.greenhousehelper.layout.Catalog
+import io.github.developergr3y.greenhousehelper.layout.Layout
 import io.github.developergr3y.greenhousehelper.layout.SavedLayouts
 import io.github.developergr3y.greenhousehelper.layout.SkyLayouts
 import io.github.developergr3y.greenhousehelper.render.LayoutRender
@@ -67,6 +72,7 @@ object GreenhouseHelper : ClientModInitializer {
                 it()
             }
             Location.tick(client)
+            Scanner.tick()
             UpdateCheck.tick()
         }
 
@@ -94,7 +100,16 @@ object GreenhouseHelper : ClientModInitializer {
         .then(ClientCommands.literal("help").executes { help(); 1 })
         .then(ClientCommands.literal("gui").executes { openPanelEditor(); 1 })
         .then(ClientCommands.literal("dump").executes { dump(); 1 })
-        .then(ClientCommands.literal("setup").executes { Greenhouses.startSetup(); 1 })
+        .then(ClientCommands.literal("setup")
+            .executes {
+                if (!Location.onGarden) chat("§cGo to your Garden first.")
+                else if (!Greenhouses.autoSetup()) {
+                    chat("§7Couldn't find a 10×10 grid by itself here, so pick its corners.")
+                    Greenhouses.startSetup()
+                }
+                1
+            }
+            .then(ClientCommands.literal("manual").executes { Greenhouses.startSetup(); 1 }))
         .then(ClientCommands.literal("corner").executes { Greenhouses.pickCorner(lookedAtGround()); 1 })
         .then(ClientCommands.literal("cancel").executes { Greenhouses.cancelSetup(); chat("Setup cancelled."); 1 })
         .then(ClientCommands.literal("list").executes { list(); 1 })
@@ -117,10 +132,22 @@ object GreenhouseHelper : ClientModInitializer {
                 1
             }))
         .then(ClientCommands.literal("layouts").executes {
-            val names = SavedLayouts.names()
-            chat(if (names.isEmpty()) "No saved layouts yet. §e/greenhouse save <name>§r saves the one you're using." else "Saved layouts: §f${names.joinToString("§7, §f")}")
+            nextTick = { Compat.setScreen(LayoutsScreen()) }
             1
         })
+        .then(ClientCommands.literal("share").executes { inGreenhouse()?.let { g -> g.layout?.let(::share) ?: chat("§cThis greenhouse has no layout.") }; 1 }
+            .then(ClientCommands.argument("name", StringArgumentType.greedyString())
+                .suggests { _, builder -> SavedLayouts.names().forEach(builder::suggest); builder.buildFuture() }
+                .executes { ctx ->
+                    val name = StringArgumentType.getString(ctx, "name").trim()
+                    SavedLayouts.load(name)?.let(::share) ?: chat("§cNo saved layout called $name.")
+                    1
+                }))
+        .then(ClientCommands.literal("capture").executes { usage("capture <name>", "saves what's planted in this greenhouse as a layout"); 1 }
+            .then(ClientCommands.argument("name", StringArgumentType.greedyString()).executes { ctx ->
+                capture(StringArgumentType.getString(ctx, "name").trim())
+                1
+            }))
         .then(ClientCommands.literal("delete").executes { usage("delete <name>", "deletes a saved layout. To take the layout off this greenhouse, use §e/greenhouse clear§r"); 1 }.then(ClientCommands.argument("name", StringArgumentType.greedyString())
             .suggests { _, builder -> SavedLayouts.names().forEach(builder::suggest); builder.buildFuture() }
             .executes { ctx ->
@@ -174,7 +201,7 @@ object GreenhouseHelper : ClientModInitializer {
         val greenhouse = inGreenhouse() ?: return
         val parsed = SkyLayouts.parse(link)
         if (parsed == null) {
-            chat("§cThat isn't a skylayouts.io layout link, e.g. https://skylayouts.io/layout.html?m=ALL_IN_ALOE&i=7")
+            chat("§cThat isn't a skylayouts.io layout link, e.g. https://skylayouts.io/layout?m=ALL_IN_ALOE&i=7 (share links work too)")
             return
         }
         chat("Loading from skylayouts.io…")
@@ -216,7 +243,7 @@ object GreenhouseHelper : ClientModInitializer {
         chat("Using §f${layout.name}§r. ${shopping(layout)}")
     }
 
-    private fun shopping(layout: io.github.developergr3y.greenhousehelper.layout.Layout) =
+    private fun shopping(layout: Layout) =
         "Needs: " + layout.shoppingList().entries.sortedByDescending { it.value }
             .joinToString("§7, ") { (plant, n) -> "§f${plant.label} §7×$n" }
 
@@ -227,7 +254,55 @@ object GreenhouseHelper : ClientModInitializer {
             return
         }
         chat("Your greenhouses:")
-        for (g in all) chat(" §f${g.label()}§7: ${g.layout?.name ?: "no layout"}")
+        for (g in all) {
+            val layout = g.layout
+            val progress = if (layout == null || g.planted < 0) "" else buildString {
+                append(" §8- §f${g.planted}§7/${g.plantTotal} planted")
+                if (g.spotTotal > 0) append(", §f${g.grown}§7/${g.spotTotal} grown")
+            }
+            chat(" §f${g.label()}§7: ${layout?.name ?: "no layout"}$progress")
+        }
+    }
+
+    private fun share(layout: Layout) {
+        val link = SkyLayouts.shareLink(layout) ?: run {
+            chat("§cThis layout has a plant skylayouts.io can't put in a link.")
+            return
+        }
+        Minecraft.getInstance().keyboardHandler.setClipboard(link)
+        val copy = Component.literal("§a[Copy again]").withStyle { it.withClickEvent(ClickEvent.CopyToClipboard(link)) }
+        val open = Component.literal("§b[Open]").withStyle { it.withClickEvent(ClickEvent.OpenUrl(java.net.URI.create(link))) }
+        Compat.chat.addClientSystemMessage(
+            Component.literal("§2[GreenhouseHelper] §rCopied a skylayouts.io link to §f${layout.shortName()}§r. It opens on the site and loads with §e/greenhouse load§r. ")
+                .append(copy).append(Component.literal(" ")).append(open),
+        )
+    }
+
+    private fun capture(name: String) {
+        val greenhouse = inGreenhouse() ?: return
+        if (!SavedLayouts.isValidName(name)) {
+            chat("§cNames can use letters, numbers, spaces and _ . - (up to 40).")
+            return
+        }
+        val cells = Scanner.read(greenhouse, 10)
+        chat("Reading what's planted…")
+        Catalog.get().whenComplete { catalog, error ->
+            Minecraft.getInstance().execute {
+                if (error != null || catalog == null) {
+                    chat("§cCouldn't get the plant list from skylayouts.io: ${(error?.cause ?: error)?.message}")
+                    return@execute
+                }
+                val layout = Capture.build(cells, catalog, 10)
+                if (layout.plants.isEmpty()) {
+                    chat("§cDidn't recognise anything planted here.")
+                    return@execute
+                }
+                layout.source = "captured from the ${greenhouse.label()}"
+                SavedLayouts.save(name, layout)
+                val target = layout.spots.firstOrNull()?.let { " for §f${it.label}§r (${layout.spots.size} spots)" } ?: ""
+                chat("Saved §f$name§r$target: ${layout.plants.size} plants. ${shopping(layout)}")
+            }
+        }
     }
 
     private fun usage(command: String, what: String) = chat("§e/greenhouse $command§r $what.")
@@ -236,11 +311,14 @@ object GreenhouseHelper : ClientModInitializer {
         chat("Commands (also §e/gh§r):")
         for ((command, what) in listOf(
             "" to "settings",
-            "setup" to "set up the greenhouse you're in (pick its corners)",
-            "load <skylayouts.io link>" to "load a layout onto it",
+            "setup" to "set up the greenhouse you're in (finds the grid, or asks for its corners)",
+            "setup manual" to "set it up by picking its corners",
+            "load <skylayouts.io link>" to "load a layout onto it (share links too)",
             "use <name>" to "put a saved layout on it",
             "save <name>" to "save its layout under a name",
-            "layouts" to "list your saved layouts",
+            "capture <name>" to "save what's planted in it as a layout",
+            "layouts" to "your layouts: preview, use, rename, rotate, share, delete",
+            "share [name]" to "copy a skylayouts.io link to this greenhouse's (or a saved) layout",
             "delete <name>" to "delete a saved layout",
             "clear" to "take the layout off this greenhouse",
             "layer <floor|crops|both>" to "which layers to show",

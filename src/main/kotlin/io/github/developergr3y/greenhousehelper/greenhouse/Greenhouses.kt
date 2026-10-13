@@ -4,11 +4,15 @@ import com.google.gson.GsonBuilder
 import com.google.gson.annotations.Expose
 import io.github.developergr3y.greenhousehelper.GreenhouseHelper
 import io.github.developergr3y.greenhousehelper.layout.Layout
+import io.github.developergr3y.greenhousehelper.util.Compat
 import io.github.developergr3y.greenhousehelper.util.Location
 import io.github.developergr3y.greenhousehelper.util.stripFormatting
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents
 import net.minecraft.client.Minecraft
+import io.github.developergr3y.greenhousehelper.layout.Kinds
 import net.minecraft.core.BlockPos
+import net.minecraft.network.chat.ClickEvent
+import net.minecraft.network.chat.Component
 import net.minecraft.world.phys.Vec3
 import java.io.File
 import kotlin.math.abs
@@ -34,6 +38,15 @@ class Greenhouse {
     /** Quarter turns applied to the layout (0-3). */
     @Expose var rotation = 0
     @Expose var layout: Layout? = null
+
+    /** Progress when last seen, for /greenhouse list: plants in place out of the layout's, and mutations grown. */
+    @Expose var planted = -1
+    @Expose var plantTotal = 0
+    @Expose var grown = 0
+    @Expose var spotTotal = 0
+
+    /** When each grown mutation ("x,y") was first seen, for decay warnings. */
+    @Expose var grownSince: MutableMap<String, Long> = mutableMapOf()
 
     /** e.g. "Plot 24 greenhouse", or where it is if the plot wasn't known. */
     fun label() = if (plot.isNotEmpty()) "$plot greenhouse" else "Greenhouse at ${minX}, $y, ${minZ}"
@@ -158,11 +171,78 @@ object Greenhouses {
             it.x1 = first.x; it.z1 = first.z; it.x2 = target.x; it.z2 = target.z; it.y = first.y
             it.plot = scoreboardPlot().orEmpty()
         }
+        add(greenhouse)
+        cancelSetup()
+        GreenhouseHelper.chat("§aSaved the ${greenhouse.label()}.§r ${nextStep(greenhouse)}")
+    }
+
+    /** Replaces any greenhouse it overlaps, keeping that one's layout. */
+    private fun add(greenhouse: Greenhouse) {
+        all.firstOrNull { overlaps(it, greenhouse) }?.let { old ->
+            greenhouse.layout = old.layout
+            greenhouse.rotation = old.rotation
+        }
         all.removeAll { overlaps(it, greenhouse) }
         all += greenhouse
         save()
+    }
+
+    private fun nextStep(greenhouse: Greenhouse) =
+        if (greenhouse.layout != null) "It still has its layout, §f${greenhouse.layout!!.shortName()}§r."
+        else "Load a layout with §e/greenhouse load <skylayouts link>§r or §e/greenhouse use <name>§r."
+
+    /**
+     * Finds the 10×10 grid you're in (or next to) by itself: the patch of plantable ground (farmland, sand, soul sand…)
+     * under or nearest you, if it's exactly 10×10. Its north-west corner becomes the top-left. False if it couldn't tell.
+     */
+    fun autoSetup(): Boolean {
+        val mc = Minecraft.getInstance()
+        val level = mc.level ?: return false
+        val player = mc.player ?: return false
+        val grounds = Kinds.GROUND_BLOCKS.values.toSet()
+        fun isGround(pos: BlockPos): Boolean {
+            if (level.getBlockState(pos).block !in grounds) return false
+            val above = pos.above()
+            return !level.getBlockState(above).isCollisionShapeFullBlock(level, above)
+        }
+        val feet = player.blockPosition()
+        val seed = sequence {
+            yield(feet.below())
+            yield(feet.below(2))
+            for (r in 1..6) for (dy in 1..2) for (dx in -r..r) for (dz in -r..r) {
+                if (maxOf(abs(dx), abs(dz)) == r) yield(feet.offset(dx, -dy, dz))
+            }
+        }.firstOrNull(::isGround) ?: return false
+
+        val seen = hashSetOf(seed)
+        val queue = ArrayDeque(listOf(seed))
+        while (queue.isNotEmpty()) {
+            val pos = queue.removeFirst()
+            for (next in listOf(pos.north(), pos.south(), pos.east(), pos.west())) {
+                if (next in seen || !isGround(next)) continue
+                seen += next
+                if (seen.size > 150) return false // spills out of the greenhouse
+                queue += next
+            }
+        }
+        val minX = seen.minOf { it.x }
+        val maxX = seen.maxOf { it.x }
+        val minZ = seen.minOf { it.z }
+        val maxZ = seen.maxOf { it.z }
+        if (maxX - minX + 1 != 10 || maxZ - minZ + 1 != 10 || seen.size < 90) return false
+
+        val greenhouse = Greenhouse().also {
+            it.x1 = minX; it.z1 = minZ; it.x2 = maxX; it.z2 = maxZ; it.y = seed.y
+            it.plot = scoreboardPlot().orEmpty()
+        }
+        add(greenhouse)
         cancelSetup()
-        GreenhouseHelper.chat("§aSaved ${greenhouse.label()}.§r Load a layout with §e/greenhouse load <skylayouts link>§r or §e/greenhouse use <name>§r.")
+        val manual = Component.literal("§e[Pick the corners]").withStyle { it.withClickEvent(ClickEvent.RunCommand("/greenhouse setup manual")) }
+        GreenhouseHelper.chat("§aFound the 10×10 grid and saved the ${greenhouse.label()}.§r ${nextStep(greenhouse)}")
+        Compat.chat.addClientSystemMessage(
+            Component.literal("§2[GreenhouseHelper] §7Top-left is its north-west corner (§e/greenhouse rotate§7 turns the layout). Wrong grid? ").append(manual),
+        )
+        return true
     }
 
     private fun overlaps(a: Greenhouse, b: Greenhouse) =
