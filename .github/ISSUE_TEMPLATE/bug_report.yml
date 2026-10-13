@@ -1,0 +1,39 @@
+name: Bug report
+description: Something isn't working right
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead? Screenshots help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can I reproduce it?
+      placeholder: |
+        1. Load a layout in a greenhouse
+        2. Walk up to ...
+        3. The waypoint ...
+  - type: input
+    id: mod-version
+    attributes:
+      label: Mod version
+      placeholder: e.g. 0.1.0+mc26.2
+    validations:
+      required: true
+  - type: input
+    id: mc-version
+    attributes:
+      label: Minecraft version
+      placeholder: e.g. 26.2
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: If it crashed or errored, paste the relevant part of `logs/latest.log`.
+      render: text

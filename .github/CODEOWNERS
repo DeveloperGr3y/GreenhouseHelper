@@ -1,0 +1,9 @@
+# Releases and CI need the owner's approval. Release PRs only touch these files, so only the owner can
+# approve (and, with the bypass on main's ruleset, merge) them.
+/CHANGELOG.md                   @DeveloperGr3y
+/version.txt                    @DeveloperGr3y
+/.release-please-manifest.json  @DeveloperGr3y
+/release-please-config.json     @DeveloperGr3y
+/gradle.properties              @DeveloperGr3y
+/versions/                      @DeveloperGr3y
+/.github/                       @DeveloperGr3y

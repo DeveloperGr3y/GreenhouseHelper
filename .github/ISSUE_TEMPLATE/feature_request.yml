@@ -1,0 +1,15 @@
+name: Feature request
+description: Suggest something new, e.g. a new layer or a shopping list option
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it help?
+      description: What's annoying at the moment, or which fish / frog is it for?

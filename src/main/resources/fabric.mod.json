@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 1,
+	"id": "greenhousehelper",
+	"version": "${version}",
+	"name": "GreenhouseHelper",
+	"description": "Greenhouse layouts for Hypixel SkyBlock, overlaid on your plot: the floor first, then what to plant where. Load them from skylayouts.io or save your own. Open the config with /greenhouse.",
+	"authors": ["DeveloperGr3y"],
+	"license": "CC0-1.0",
+	"icon": "assets/greenhousehelper/icon.png",
+	"contact": {
+		"sources": "https://github.com/DeveloperGr3y/GreenhouseHelper",
+		"issues": "https://github.com/DeveloperGr3y/GreenhouseHelper/issues"
+	},
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			{
+				"adapter": "kotlin",
+				"value": "io.github.developergr3y.greenhousehelper.GreenhouseHelper"
+			}
+		]
+	},
+	"accessWidener": "greenhousehelper.classtweaker",
+	"depends": {
+		"fabricloader": ">=${loader_version}",
+		"minecraft": "${minecraft_range}",
+		"java": ">=25",
+		"fabric-api": "*",
+		"fabric-language-kotlin": "*"
+	},
+	"suggests": {
+		"hypixel-mod-api": "*"
+	}
+}
