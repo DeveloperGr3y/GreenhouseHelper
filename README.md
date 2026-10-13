@@ -39,7 +39,8 @@ Set up as many greenhouses as you like; each remembers its own layout, per SkyBl
 | `/greenhouse save <name>` | Save this greenhouse's layout under a name (stays on your computer) |
 | `/greenhouse capture <name>` | Save what's planted in this greenhouse as a layout |
 | `/greenhouse use <name>` · `delete <name>` | Your saved layouts |
-| `/greenhouse share [name]` | Copy a skylayouts.io link to a layout, to share it |
+| `/greenhouse share [name]` | Copy a share code (`GH1:…`) for a layout, to paste in chat or Discord |
+| `/greenhouse load <code>` · `paste` | Load a share code, typed or from your clipboard. Codes posted in chat get **[Preview]** and **[Load]** buttons |
 | `/greenhouse layer <floor\|crops\|both>` | Which layers to show |
 | `/greenhouse rotate` | Turn the layout a quarter turn |
 | `/greenhouse clear` · `remove` · `list` | Clear the layout, forget the greenhouse, list them (with progress) |

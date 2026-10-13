@@ -5,7 +5,7 @@ import io.github.developergr3y.greenhousehelper.greenhouse.Greenhouses
 import io.github.developergr3y.greenhousehelper.layout.Kinds
 import io.github.developergr3y.greenhousehelper.layout.Layout
 import io.github.developergr3y.greenhousehelper.layout.SavedLayouts
-import io.github.developergr3y.greenhousehelper.layout.SkyLayouts
+import io.github.developergr3y.greenhousehelper.layout.ShareCodes
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.Button
@@ -17,9 +17,10 @@ import net.minecraft.network.chat.Component
 /**
  * `/greenhouse layouts`: the layouts you have, i.e. the ones on your greenhouses and the ones you've saved (nothing is
  * fetched from skylayouts.io here). Pick one to see it, then use it on the greenhouse you're in, save it under a name,
- * rename it, turn it, copy a share link, or delete it.
+ * rename it, turn it, copy a share code, or delete it. A layout someone shared ([shared]) shows at the top until you
+ * save or use it.
  */
-class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
+class LayoutsScreen(private var shared: Layout? = null) : Screen(Component.literal("Greenhouse layouts")) {
     /** One layout in the list: on a greenhouse, or saved under [savedName]. */
     private class Entry(val title: String, val subtitle: String, val layout: Layout, val greenhouse: Greenhouse?, val savedName: String?)
 
@@ -42,6 +43,7 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
     private lateinit var rotateButton: Button
     private lateinit var shareButton: Button
     private lateinit var deleteButton: Button
+    private lateinit var pasteButton: Button
 
     private val listX = 12
     private val listTop = 52
@@ -59,6 +61,7 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
         search.setHint(Component.literal("Search…"))
         search.setResponder { scroll = 0 }
         addRenderableWidget(search)
+        pasteButton = button("Paste code", listX + listWidth - 70, 8, 70) { paste() }
 
         val y = buttonsTop
         nameBox = EditBox(font, rightX, y, 150, 18, Component.literal("Name"))
@@ -69,9 +72,9 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
         saveButton = button("Save as", rightX + 154, y, 64) { saveAs() }
         renameButton = button("Rename", rightX + 222, y, 64) { rename() }
         rotateButton = button("Rotate", rightX + 154, y + 24, 64) { rotate() }
-        shareButton = button("Share link", rightX + 222, y + 24, 64) { share() }
+        shareButton = button("Copy code", rightX + 222, y + 24, 64) { share() }
         deleteButton = button("Delete", rightX, y + 48, 150) { delete() }
-        select(entries.firstOrNull { it.title == selected?.title && it.savedName == selected?.savedName } ?: entries.firstOrNull())
+        select(entries.firstOrNull { it.title == selected?.title && it.savedName == selected?.savedName && it.greenhouse === selected?.greenhouse } ?: entries.firstOrNull())
     }
 
     private fun button(text: String, x: Int, y: Int, w: Int, action: () -> Unit): Button =
@@ -79,6 +82,7 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
 
     private fun reload() {
         val list = mutableListOf<Entry>()
+        shared?.let { list += Entry("Shared layout", it.spots.firstOrNull()?.label ?: "not saved yet", it, null, null) }
         for (g in Greenhouses.list()) {
             val layout = g.layout ?: continue
             list += Entry(g.label(), layout.shortName(), layout, g, null)
@@ -95,6 +99,7 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
         val origin = when {
             layout.source.contains("skylayouts.io") -> "loaded from skylayouts.io"
             layout.source.startsWith("captured") -> layout.source
+            layout.source == "shared code" -> "shared with you"
             else -> "your own"
         }
         val target = layout.spots.firstOrNull()?.label
@@ -105,6 +110,10 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
         val query = if (::search.isInitialized) search.value.trim().lowercase() else ""
         val shown = entries.filter { query.isEmpty() || it.title.lowercase().contains(query) || it.subtitle.lowercase().contains(query) }
         val rows = mutableListOf<Row>()
+        shown.filter { it.greenhouse == null && it.savedName == null }.takeIf { it.isNotEmpty() }?.let { s ->
+            rows += Header("Shared with you")
+            s.forEach { rows += Item(it) }
+        }
         val onGreenhouses = shown.filter { it.greenhouse != null }
         val saved = shown.filter { it.savedName != null }
         if (onGreenhouses.isNotEmpty()) {
@@ -142,6 +151,7 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
             when {
                 confirmDelete -> "§cClick again to confirm"
                 entry?.greenhouse != null -> "Clear from greenhouse"
+                entry != null && entry.savedName == null -> "Dismiss"
                 else -> "Delete"
             },
         )
@@ -172,6 +182,7 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
         val name = validName() ?: return
         val existed = name in SavedLayouts.names()
         SavedLayouts.save(name, entry.layout)
+        if (entry.layout === shared) shared = null
         status = if (existed) "§aReplaced $name." else "§aSaved as $name."
         refresh(name, name)
     }
@@ -197,8 +208,10 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
         if (greenhouse != null) {
             greenhouse.rotation = (greenhouse.rotation + 1) and 3
             Greenhouses.save()
+        } else if (entry.savedName != null) {
+            SavedLayouts.save(entry.savedName, entry.layout.rotated())
         } else {
-            SavedLayouts.save(entry.savedName ?: return, entry.layout.rotated())
+            shared = entry.layout.rotated()
         }
         status = "§aTurned a quarter turn."
         refresh(entry.title, entry.savedName)
@@ -206,13 +219,23 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
 
     private fun share() {
         val entry = selected ?: return
-        val link = SkyLayouts.shareLink(entry.layout)
-        if (link == null) {
-            status = "§cThis layout has a plant skylayouts.io can't put in a link."
+        val code = ShareCodes.encode(entry.layout)
+        Minecraft.getInstance().keyboardHandler.setClipboard(code)
+        status = "§aCopied a share code (${code.length} characters). Anyone with the mod can load it."
+    }
+
+    /** A share code from your clipboard (e.g. copied from Discord) becomes the shared layout. */
+    private fun paste() {
+        val text = Minecraft.getInstance().keyboardHandler.clipboard
+        val layout = ShareCodes.PATTERN.find(text)?.value?.let(ShareCodes::decode)
+        if (layout == null) {
+            status = "§cYour clipboard doesn't have a GH1: share code in it."
             return
         }
-        Minecraft.getInstance().keyboardHandler.setClipboard(link)
-        status = "§aCopied a skylayouts.io link to your clipboard."
+        shared = layout
+        status = "§aLoaded the code from your clipboard. Use it, or save it under a name."
+        reload()
+        select(entries.firstOrNull { it.greenhouse == null && it.savedName == null })
     }
 
     private fun delete() {
@@ -227,9 +250,12 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
             greenhouse.layout = null
             Greenhouses.save()
             status = "§aCleared the ${greenhouse.label()}'s layout."
-        } else {
-            SavedLayouts.delete(entry.savedName ?: return)
+        } else if (entry.savedName != null) {
+            SavedLayouts.delete(entry.savedName)
             status = "§aDeleted ${entry.title}."
+        } else {
+            shared = null
+            status = "§aDismissed."
         }
         refresh(null, null)
     }
@@ -245,7 +271,7 @@ class LayoutsScreen : Screen(Component.literal("Greenhouse layouts")) {
     override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, delta: Float) {
         super.extractRenderState(graphics, mouseX, mouseY, delta)
         graphics.text(font, "§lGreenhouse layouts", listX, 10, -1, true)
-        graphics.text(font, "§7The ones on your greenhouses and the ones you've saved. Add more with /greenhouse load.", listX, 19, -1, false)
+        graphics.text(font, "§7The ones on your greenhouses and the ones you've saved. Add more with /greenhouse load or a share code.", listX, 19, -1, false)
 
         // The list.
         val bottom = height - 12

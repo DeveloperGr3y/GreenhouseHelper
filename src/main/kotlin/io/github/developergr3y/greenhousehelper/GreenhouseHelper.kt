@@ -15,6 +15,7 @@ import io.github.developergr3y.greenhousehelper.hud.Panels
 import io.github.developergr3y.greenhousehelper.layout.Catalog
 import io.github.developergr3y.greenhousehelper.layout.Layout
 import io.github.developergr3y.greenhousehelper.layout.SavedLayouts
+import io.github.developergr3y.greenhousehelper.layout.ShareCodes
 import io.github.developergr3y.greenhousehelper.layout.SkyLayouts
 import io.github.developergr3y.greenhousehelper.render.LayoutRender
 import io.github.developergr3y.greenhousehelper.util.Compat
@@ -28,6 +29,7 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents
@@ -86,6 +88,17 @@ object GreenhouseHelper : ClientModInitializer {
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT, Identifier.fromNamespaceAndPath(MOD_ID, "panels"), Panels::render)
         Panels.register()
 
+        // A share code someone posts in chat gets [Preview] and [Load] buttons after it.
+        ClientReceiveMessageEvents.MODIFY_GAME.register { message, overlay ->
+            if (overlay) return@register message
+            val layout = ShareCodes.PATTERN.find(message.string)?.value?.let(ShareCodes::decode) ?: return@register message
+            val id = rememberShared(layout)
+            message.copy().append(Component.literal(" "))
+                .append(button("§b[Preview]", "/greenhouse shared $id", "Look at it before using it"))
+                .append(Component.literal(" "))
+                .append(button("§a[Load]", "/greenhouse shared $id use", "Put it on the greenhouse you're in"))
+        }
+
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(command("greenhouse"))
             dispatcher.register(command("gh"))
@@ -117,7 +130,7 @@ object GreenhouseHelper : ClientModInitializer {
             inGreenhouse()?.let { Greenhouses.remove(it); chat("Forgot the ${it.label()}.") }
             1
         })
-        .then(ClientCommands.literal("load").executes { usage("load <skylayouts.io link>", "loads a layout onto the greenhouse you're in"); 1 }.then(ClientCommands.argument("link", StringArgumentType.greedyString()).executes { ctx ->
+        .then(ClientCommands.literal("load").executes { usage("load <skylayouts.io link or share code>", "loads a layout onto the greenhouse you're in"); 1 }.then(ClientCommands.argument("link", StringArgumentType.greedyString()).executes { ctx ->
             load(StringArgumentType.getString(ctx, "link"))
             1
         }))
@@ -143,6 +156,12 @@ object GreenhouseHelper : ClientModInitializer {
                     SavedLayouts.load(name)?.let(::share) ?: chat("§cNo saved layout called $name.")
                     1
                 }))
+        .then(ClientCommands.literal("paste").executes { paste(); 1 })
+        .then(ClientCommands.literal("shared").then(ClientCommands.argument("id", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1))
+            .executes { ctx -> preview(sharedLayouts[com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "id")]); 1 }
+            .then(ClientCommands.literal("use").executes { ctx ->
+                sharedLayouts[com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "id")]?.let(::apply) ?: chat("§cThat shared layout has gone (it's only kept until you leave)."); 1
+            })))
         .then(ClientCommands.literal("capture").executes { usage("capture <name>", "saves what's planted in this greenhouse as a layout"); 1 }
             .then(ClientCommands.argument("name", StringArgumentType.greedyString()).executes { ctx ->
                 capture(StringArgumentType.getString(ctx, "name").trim())
@@ -198,6 +217,11 @@ object GreenhouseHelper : ClientModInitializer {
         }
 
     private fun load(link: String) {
+        ShareCodes.PATTERN.find(link)?.let { code ->
+            val layout = ShareCodes.decode(code.value)
+            if (layout == null) chat("§cThat share code is broken or cut off. If it's long, copy it and use §e/greenhouse paste§c.") else apply(layout)
+            return
+        }
         val greenhouse = inGreenhouse() ?: return
         val parsed = SkyLayouts.parse(link)
         if (parsed == null) {
@@ -264,18 +288,53 @@ object GreenhouseHelper : ClientModInitializer {
         }
     }
 
+    /** Copies the layout's share code. Paste it in chat or Discord; anyone with the mod can load it. */
     private fun share(layout: Layout) {
-        val link = SkyLayouts.shareLink(layout) ?: run {
-            chat("§cThis layout has a plant skylayouts.io can't put in a link.")
+        val code = ShareCodes.encode(layout)
+        Minecraft.getInstance().keyboardHandler.setClipboard(code)
+        val copy = Component.literal("§a[Copy again]").withStyle {
+            it.withClickEvent(ClickEvent.CopyToClipboard(code)).withHoverEvent(HoverEvent.ShowText(Component.literal(code)))
+        }
+        val tooLong = if (code.length > 240) " §7It's too long for one chat message, so share it in Discord; they can load it with §e/greenhouse paste§7." else " §7Paste it in chat or Discord."
+        Compat.chat.addClientSystemMessage(
+            Component.literal("§2[GreenhouseHelper] §rCopied the share code for §f${layout.shortName()}§r (${code.length} characters).$tooLong ").append(copy),
+        )
+    }
+
+    /** Layouts shared in chat this session, by the number their buttons use. */
+    private val sharedLayouts = HashMap<Int, Layout>()
+
+    private fun rememberShared(layout: Layout): Int {
+        val id = sharedLayouts.size + 1
+        sharedLayouts[id] = layout
+        return id
+    }
+
+    private fun button(text: String, command: String, hover: String): Component = Component.literal(text).withStyle {
+        it.withClickEvent(ClickEvent.RunCommand(command)).withHoverEvent(HoverEvent.ShowText(Component.literal(hover)))
+    }
+
+    private fun preview(layout: Layout?) {
+        if (layout == null) {
+            chat("§cThat shared layout has gone (it's only kept until you leave).")
             return
         }
-        Minecraft.getInstance().keyboardHandler.setClipboard(link)
-        val copy = Component.literal("§a[Copy again]").withStyle { it.withClickEvent(ClickEvent.CopyToClipboard(link)) }
-        val open = Component.literal("§b[Open]").withStyle { it.withClickEvent(ClickEvent.OpenUrl(java.net.URI.create(link))) }
-        Compat.chat.addClientSystemMessage(
-            Component.literal("§2[GreenhouseHelper] §rCopied a skylayouts.io link to §f${layout.shortName()}§r. It opens on the site and loads with §e/greenhouse load§r. ")
-                .append(copy).append(Component.literal(" ")).append(open),
-        )
+        nextTick = { Compat.setScreen(LayoutsScreen(layout.copy())) }
+    }
+
+    /** A share code from your clipboard, e.g. copied from Discord: shown in the layouts screen to use or save. */
+    private fun paste() {
+        val text = Minecraft.getInstance().keyboardHandler.clipboard
+        val layout = ShareCodes.PATTERN.find(text)?.value?.let(ShareCodes::decode)
+        if (layout == null) chat("§cYour clipboard doesn't have a GH1: share code in it.") else preview(layout)
+    }
+
+    /** Puts a layout on the greenhouse you're in. */
+    private fun apply(layout: Layout) {
+        val greenhouse = inGreenhouse() ?: return
+        greenhouse.layout = layout.copy()
+        Greenhouses.save()
+        chat("Loaded §f${layout.shortName()}§r onto the ${greenhouse.label()}. ${shopping(layout)}")
     }
 
     private fun capture(name: String) {
@@ -318,7 +377,8 @@ object GreenhouseHelper : ClientModInitializer {
             "save <name>" to "save its layout under a name",
             "capture <name>" to "save what's planted in it as a layout",
             "layouts" to "your layouts: preview, use, rename, rotate, share, delete",
-            "share [name]" to "copy a skylayouts.io link to this greenhouse's (or a saved) layout",
+            "share [name]" to "copy a share code for this greenhouse's (or a saved) layout",
+            "load <share code>" to "load a code someone shared (or §e/greenhouse paste§7 from your clipboard)",
             "delete <name>" to "delete a saved layout",
             "clear" to "take the layout off this greenhouse",
             "layer <floor|crops|both>" to "which layers to show",
