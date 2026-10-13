@@ -55,7 +55,7 @@ object SkyLayouts {
         // The intervals this mutation has a layout for; use yours, or the nearest one.
         val intervals = boards.keySet().filter { it.startsWith(prefix) && it.endsWith(suffix) }
             .mapNotNull { it.removePrefix(prefix).removeSuffix(suffix).toIntOrNull() }
-        require(intervals.isNotEmpty()) { "skylayouts.io has no layout for ${link.mutation} on plot ${link.plot}" }
+        require(intervals.isNotEmpty()) { "skylayouts.io has no layout ${link.plot} for ${link.mutation}" }
         val interval = intervals.minBy { abs(it - link.interval) * 2 + (if (it > link.interval) 1 else 0) }
         val board = boards.getAsJsonObject("$prefix$interval$suffix")
 
@@ -64,7 +64,8 @@ object SkyLayouts {
         fun label(kind: String) = pieces.getAsJsonObject(kind)?.get("label")?.asString ?: kind
 
         val layout = Layout()
-        layout.name = "${label(link.mutation)} (interval $interval, plot ${link.plot})"
+        // The site plans up to three greenhouse plots per mutation; "p" picks one. Nothing to do with Garden plot numbers.
+        layout.name = "${label(link.mutation)} (interval $interval, layout ${link.plot} of 3)"
         layout.source = source
         layout.size = board.get("size")?.asInt ?: 10
         for (element in board.getAsJsonArray("tiles")) {

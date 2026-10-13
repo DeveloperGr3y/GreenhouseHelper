@@ -8,7 +8,7 @@ import com.google.gson.annotations.Expose
  * row. Plants bigger than one cell (e.g. 2×2) are stored once, at their top-left cell.
  */
 class Layout {
-    /** e.g. "All In Aloe (interval 7, plot 1)", or the name you saved it under. */
+    /** e.g. "All In Aloe (interval 7, layout 1 of 3)", or the name you saved it under. */
     @Expose var name = ""
 
     /** Where it came from, e.g. a skylayouts.io link; empty for your own. */
@@ -19,6 +19,9 @@ class Layout {
 
     /** Cells where the target mutation should appear. */
     @Expose var spots: MutableList<Spot> = mutableListOf()
+
+    /** The name without its details: "All In Aloe (interval 7, layout 1 of 3)" -> "All In Aloe". */
+    fun shortName() = name.substringBefore(" (")
 
     /** Plants to buy, by label, with how many (big plants count once). */
     fun shoppingList(): Map<Plant, Int> = plants.groupingBy { it.sameKind() }.eachCount()

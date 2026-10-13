@@ -35,6 +35,9 @@ class Greenhouse {
     @Expose var rotation = 0
     @Expose var layout: Layout? = null
 
+    /** e.g. "Plot 24 greenhouse", or where it is if the plot wasn't known. */
+    fun label() = if (plot.isNotEmpty()) "$plot greenhouse" else "Greenhouse at ${minX}, $y, ${minZ}"
+
     val minX get() = min(x1, x2)
     val maxX get() = max(x1, x2)
     val minZ get() = min(z1, z2)
@@ -159,8 +162,7 @@ object Greenhouses {
         all += greenhouse
         save()
         cancelSetup()
-        val where = greenhouse.plot.ifEmpty { "this greenhouse" }
-        GreenhouseHelper.chat("§aSaved $where.§r Load a layout with §e/greenhouse load <skylayouts link>§r or §e/greenhouse use <name>§r.")
+        GreenhouseHelper.chat("§aSaved ${greenhouse.label()}.§r Load a layout with §e/greenhouse load <skylayouts link>§r or §e/greenhouse use <name>§r.")
     }
 
     private fun overlaps(a: Greenhouse, b: Greenhouse) =
