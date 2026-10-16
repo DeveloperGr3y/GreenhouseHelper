@@ -42,6 +42,7 @@ Set up as many greenhouses as you like; each remembers its own layout, per SkyBl
 | `/greenhouse share [name]` | Copy a share code (`GH1:…`) for a layout, to paste in chat or Discord |
 | `/greenhouse load <code>` · `paste` | Load a share code, typed or from your clipboard. Codes posted in chat get **[Preview]** and **[Load]** buttons |
 | `/greenhouse layer <floor\|crops\|both>` | Which layers to show |
+| `/greenhouse hide` | Hide the big plant models in your greenhouse (all, or all but the mutation you're growing); only on your screen |
 | `/greenhouse rotate` | Turn the layout a quarter turn |
 | `/greenhouse clear` · `remove` · `list` | Clear the layout, forget the greenhouse, list them (with progress) |
 | `/greenhouse gui` | Move the shopping list panel |

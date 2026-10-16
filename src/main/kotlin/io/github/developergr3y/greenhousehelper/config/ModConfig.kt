@@ -36,6 +36,11 @@ class ModConfig : Config() {
 
     @Expose
     @JvmField
+    @Category(name = "Plant Models", desc = "Hide the big plant models (e.g. Magic Jellybean's tower of cubes) in your greenhouse.")
+    var plants = PlantsConfig()
+
+    @Expose
+    @JvmField
     @Category(name = "Plant Codes", desc = "Short codes (e.g. MJLB) floating above each plant.")
     var labels = LabelsConfig()
 
@@ -129,6 +134,27 @@ class ProgressConfig {
     @ConfigOption(name = "Growth", desc = "Show a grown mutation's stage above it, and a gold post when it's ready to harvest.")
     @ConfigEditorBoolean
     var growth = true
+}
+
+enum class HidePlants(private val label: String) {
+    OFF("Show all"),
+    KEEP_TARGET("Hide all but the mutation you're growing"),
+    ALL("Hide all"),
+    ;
+
+    override fun toString() = label
+}
+
+class PlantsConfig {
+    @Expose
+    @JvmField
+    @ConfigOption(
+        name = "Hide Plant Models",
+        desc = "In a greenhouse you've set up, don't draw the plants' head models so you can see the layout and the ground. " +
+            "Only on your screen; name tags stay. Also: §e/greenhouse hide§7.",
+    )
+    @ConfigEditorDropdown
+    var hide = HidePlants.OFF
 }
 
 class LabelsConfig {

@@ -2,12 +2,14 @@ package io.github.developergr3y.greenhousehelper
 
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
+import io.github.developergr3y.greenhousehelper.config.HidePlants
 import io.github.developergr3y.greenhousehelper.config.Layer
 import io.github.developergr3y.greenhousehelper.config.ModConfig
 import io.github.developergr3y.greenhousehelper.greenhouse.Capture
 import io.github.developergr3y.greenhousehelper.greenhouse.Dump
 import io.github.developergr3y.greenhousehelper.greenhouse.Greenhouse
 import io.github.developergr3y.greenhousehelper.greenhouse.Greenhouses
+import io.github.developergr3y.greenhousehelper.greenhouse.PlantHider
 import io.github.developergr3y.greenhousehelper.greenhouse.Scanner
 import io.github.developergr3y.greenhousehelper.hud.HudEditScreen
 import io.github.developergr3y.greenhousehelper.hud.LayoutsScreen
@@ -75,6 +77,7 @@ object GreenhouseHelper : ClientModInitializer {
             }
             Location.tick(client)
             Scanner.tick()
+            PlantHider.tick()
             UpdateCheck.tick()
         }
 
@@ -156,6 +159,13 @@ object GreenhouseHelper : ClientModInitializer {
                     SavedLayouts.load(name)?.let(::share) ?: chat("§cNo saved layout called $name.")
                     1
                 }))
+        .then(ClientCommands.literal("hide").executes {
+            val plants = config.plants
+            plants.hide = HidePlants.entries[(plants.hide.ordinal + 1) % HidePlants.entries.size]
+            saveConfig()
+            chat("Plant models: §f${plants.hide}")
+            1
+        })
         .then(ClientCommands.literal("paste").executes { paste(); 1 })
         .then(ClientCommands.literal("shared").then(ClientCommands.argument("id", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1))
             .executes { ctx -> preview(sharedLayouts[com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "id")]); 1 }
@@ -382,6 +392,7 @@ object GreenhouseHelper : ClientModInitializer {
             "delete <name>" to "delete a saved layout",
             "clear" to "take the layout off this greenhouse",
             "layer <floor|crops|both>" to "which layers to show",
+            "hide" to "show all plant models / hide all but your mutation / hide all",
             "rotate" to "turn the layout a quarter turn",
             "list" to "your greenhouses and their layouts",
             "remove" to "forget the greenhouse you're in",
