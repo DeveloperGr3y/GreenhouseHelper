@@ -1,0 +1,14 @@
+{
+	"required": true,
+	"package": "io.github.developergr3y.greenhousehelper.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"plugin": "io.github.developergr3y.greenhousehelper.mixin.GreenhouseMixinPlugin",
+	"client": [
+		"EntityRenderDispatcherMixin",
+		"SectionCompilerMixin",
+		"SodiumMeshingMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}
