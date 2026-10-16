@@ -36,6 +36,12 @@ object PlantHider {
     /** Called by the entity renderer for everything it's about to draw, so it has to be quick. */
     fun isHidden(entity: Entity) = hidden.isNotEmpty() && entity.id in hidden
 
+    /** The same, by coordinates (Sodium's chunk builder). */
+    fun hidesBlock(x: Int, y: Int, z: Int): Boolean {
+        val blocks = hiddenBlocks
+        return blocks.isNotEmpty() && BlockPos.asLong(x, y, z) in blocks
+    }
+
     /** Called while building chunk meshes, on other threads. */
     fun hidesBlock(pos: BlockPos): Boolean {
         val blocks = hiddenBlocks

@@ -19,6 +19,9 @@ repositories {
     maven("https://repo.hypixel.net/repository/Hypixel") {
         content { includeGroup("net.hypixel") }
     }
+    maven("https://api.modrinth.com/maven") {
+        content { includeGroup("maven.modrinth") }
+    }
 }
 
 // Libraries bundled (and renamed) inside our jar so they can't clash with other mods' copies.
@@ -32,6 +35,9 @@ dependencies {
 
     // Hypixel Mod API: only its API, for Hypixel's location packet. Not bundled; used only if its mod is installed.
     compileOnly("net.hypixel:mod-api:1.0.2")
+
+    // Sodium: only to compile the hook that hides crops in its chunk builder. Not bundled; used only if it's installed.
+    compileOnly("maven.modrinth:sodium:mc26.1.2-0.9.2-fabric")
 
     // Kotlin runtime, nested in our jar so players don't need to install it separately.
     val kotlinRuntime = "net.fabricmc:fabric-language-kotlin:${property("fabric_kotlin_version")}"
