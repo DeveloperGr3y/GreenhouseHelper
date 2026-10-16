@@ -3,7 +3,8 @@
 	"package": "io.github.developergr3y.greenhousehelper.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
-		"EntityRenderDispatcherMixin"
+		"EntityRenderDispatcherMixin",
+		"SectionCompilerMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

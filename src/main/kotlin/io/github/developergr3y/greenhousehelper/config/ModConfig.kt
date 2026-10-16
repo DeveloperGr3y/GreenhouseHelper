@@ -150,8 +150,9 @@ class PlantsConfig {
     @JvmField
     @ConfigOption(
         name = "Hide Plant Models",
-        desc = "In a greenhouse you've set up, don't draw the plants' head models so you can see the layout and the ground. " +
-            "Only on your screen; name tags stay. Also: §e/greenhouse hide§7.",
+        desc = "In a greenhouse you've set up, don't draw the plants (their head models and the crop blocks under them, " +
+            "like sugar cane) so you can see the layout and the ground. A solid block in the plant's colour marks each " +
+            "planted cell instead. Only on your screen: you can still break them, and name tags stay. Also: §e/greenhouse hide§7.",
     )
     @ConfigEditorDropdown
     var hide = HidePlants.OFF
@@ -169,6 +170,12 @@ class LabelsConfig {
     @ConfigOption(name = "Distance", desc = "Only show codes within this many blocks.")
     @ConfigEditorSlider(minValue = 4f, maxValue = 24f, minStep = 1f)
     var distance = 12f
+
+    @Expose
+    @JvmField
+    @ConfigOption(name = "Size", desc = "How big the codes and spot labels are.")
+    @ConfigEditorSlider(minValue = 0.5f, maxValue = 3f, minStep = 0.25f)
+    var size = 1.5f
 }
 
 class ShoppingConfig {

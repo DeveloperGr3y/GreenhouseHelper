@@ -2,9 +2,11 @@ package io.github.developergr3y.greenhousehelper.render
 
 import com.mojang.blaze3d.vertex.PoseStack
 import io.github.developergr3y.greenhousehelper.GreenhouseHelper
+import io.github.developergr3y.greenhousehelper.config.HidePlants
 import io.github.developergr3y.greenhousehelper.config.Layer
 import io.github.developergr3y.greenhousehelper.greenhouse.Greenhouse
 import io.github.developergr3y.greenhousehelper.greenhouse.Greenhouses
+import io.github.developergr3y.greenhousehelper.greenhouse.PlantHider
 import io.github.developergr3y.greenhousehelper.greenhouse.PlantState
 import io.github.developergr3y.greenhousehelper.greenhouse.Scan
 import io.github.developergr3y.greenhousehelper.greenhouse.Scanner
@@ -38,6 +40,9 @@ object LayoutRender {
     private const val READY = 0xFFC107
     private const val LIFT = 0.01
     private const val CROP_HEIGHT = 0.9
+
+    /** How tall the solid stand-ins for hidden plants are. */
+    private const val STAND_IN_HEIGHT = 0.5
 
     private val overlay get() = GreenhouseHelper.config.overlay
     private val labels get() = GreenhouseHelper.config.labels
@@ -101,6 +106,11 @@ object LayoutRender {
     private fun crops(greenhouse: Greenhouse, layout: Layout, scan: Scan?, held: String?, alpha: Int, quad: Quad) {
         for (plant in layout.plants) {
             val state = scan?.state(plant)
+            if (state == PlantState.DONE && PlantHider.active) {
+                // The plant is hidden: stand in for it with a solid block in its colour.
+                faces(box(greenhouse, layout, plant.x, plant.y, plant.width, plant.height, STAND_IN_HEIGHT), (0xB0 shl 24) or plant.colour, quad)
+                continue
+            }
             if (state == PlantState.DONE && progress.hideDone) continue
             val argb = when {
                 state == PlantState.WRONG && progress.markWrong -> (maxOf(alpha, 0x99) shl 24) or WRONG
@@ -114,7 +124,12 @@ object LayoutRender {
 
     /** Posts on mutation spots: gold when ready to harvest, green when the ring around an empty one is complete. */
     private fun posts(greenhouse: Greenhouse, layout: Layout, scan: Scan, quad: Quad) {
+        val hidingAll = PlantHider.active && GreenhouseHelper.config.plants.hide == HidePlants.ALL
         for (state in scan.spots) {
+            if (hidingAll && state.grown) {
+                val pos = greenhouse.ground(state.spot.x, state.spot.y, layout.size)
+                faces(AABB(pos.x + 0.04, pos.y + 1.0 + LIFT, pos.z + 0.04, pos.x + 0.96, pos.y + 1.0 + STAND_IN_HEIGHT, pos.z + 0.96), (0xB0 shl 24) or state.spot.colour, quad)
+            }
             val rgb = when {
                 progress.growth && state.ready -> READY
                 progress.ringStatus && !state.grown && state.ringComplete -> RING_DONE
@@ -127,13 +142,13 @@ object LayoutRender {
     }
 
     /** The world box over cells (x, y) to (x + w - 1, y + h - 1), whichever way the layout is turned. */
-    private fun box(greenhouse: Greenhouse, layout: Layout, x: Int, y: Int, w: Int, h: Int): AABB {
+    private fun box(greenhouse: Greenhouse, layout: Layout, x: Int, y: Int, w: Int, h: Int, height: Double = CROP_HEIGHT): AABB {
         val a = greenhouse.ground(x, y, layout.size)
         val b = greenhouse.ground(x + w - 1, y + h - 1, layout.size)
         val inset = 0.04
         return AABB(
             minOf(a.x, b.x) + inset, a.y + 1.0 + LIFT, minOf(a.z, b.z) + inset,
-            maxOf(a.x, b.x) + 1 - inset, a.y + 1.0 + CROP_HEIGHT, maxOf(a.z, b.z) + 1 - inset,
+            maxOf(a.x, b.x) + 1 - inset, a.y + 1.0 + height, maxOf(a.z, b.z) + 1 - inset,
         )
     }
 
@@ -160,12 +175,17 @@ object LayoutRender {
         fun label(at: Vec3, text: String, rgb: Int) {
             if (at.distanceTo(eye) > labels.distance) return
             val (x, y) = Projection.toScreen(at) ?: return
-            graphics.text(font, text, x - font.width(text) / 2, y - 4, (0xFF shl 24) or rgb, true)
+            val pose = graphics.pose()
+            pose.pushMatrix()
+            pose.translate(x.toFloat(), y.toFloat())
+            pose.scale(labels.size)
+            graphics.text(font, text, -font.width(text) / 2, -4, (0xFF shl 24) or rgb, true)
+            pose.popMatrix()
         }
 
         if (overlay.layer != Layer.FLOOR) for (plant in layout.plants) {
             val state = scan?.state(plant)
-            if (state == PlantState.DONE && progress.hideDone) continue
+            if (state == PlantState.DONE && progress.hideDone && !PlantHider.active) continue
             val box = box(greenhouse, layout, plant.x, plant.y, plant.width, plant.height)
             val at = Vec3((box.minX + box.maxX) / 2, box.maxY + 0.35, (box.minZ + box.maxZ) / 2)
             if (state == PlantState.WRONG && progress.markWrong) label(at, "✕ ${plant.abbr}", WRONG) else label(at, plant.abbr, plant.colour)
